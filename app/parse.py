@@ -40,6 +40,7 @@ def parse_single_quote(quote_soup: Tag) -> Quote:
 
 
 def prettify_description(text: str) -> str:
+    """Mainly to remove unexpected whitespace characters"""
     return " ".join(text.split()).replace("''", '"')
 
 
