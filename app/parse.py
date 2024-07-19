@@ -82,7 +82,7 @@ def get_single_page_authors(
             cached_author_hrefs.append(author_href)
         else:
             logging.info(
-                f"Author already added ({author_href.split("/")[-1]})"
+                f'Author already added ({author_href.split("/")[-1]})'
             )
 
     return authors
@@ -103,7 +103,7 @@ def get_authors_and_quotes() -> ([Author], [Quote]):
 
     while next_page:
         logging.info(
-            f"Starting scraping page #{next_page.get("href").split("/")[2]}"
+            f'Starting scraping page #{next_page.get("href").split("/")[2]}'
         )
 
         page = requests.get(BASE_URL + next_page.get("href")).content
