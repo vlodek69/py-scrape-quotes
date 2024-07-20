@@ -56,8 +56,6 @@ class QuoteAuthorScraper:
         return " ".join(text.split()).replace("''", '"')
 
     def parse_single_author(self, author_href: str) -> Author:
-        # page = requests.get(BASE_URL + author_href).content
-        # author_page_soup = BeautifulSoup(page, "html.parser")
         author_page_soup = self.get_page_soup(self.base_url + author_href)
 
         author = Author(
@@ -98,13 +96,8 @@ class QuoteAuthorScraper:
     def get_authors_and_quotes(self) -> ([Author], [Quote]):
         """Authors and quotes scraping done in a single cycle for minimizing
         the number of requests"""
-        # page = requests.get(BASE_URL).content
-        # first_page_soup = BeautifulSoup(page, "html.parser")
         first_page_soup = self.get_page_soup(self.base_url)
-
-        # cached_author_hrefs = []
         all_authors = self.get_single_page_authors(first_page_soup)
-
         all_quotes = self.get_single_page_quotes(first_page_soup)
 
         next_page = first_page_soup.select_one(".next > a")
@@ -115,12 +108,9 @@ class QuoteAuthorScraper:
                 f'{next_page.get("href").split("/")[2]}'
             )
 
-            # page = requests.get(BASE_URL + next_page.get("href")).content
-            # page_soup = BeautifulSoup(page, "html.parser")
             page_soup = self.get_page_soup(
                 self.base_url + next_page.get("href")
             )
-
             all_authors.extend(self.get_single_page_authors(page_soup))
             all_quotes.extend(self.get_single_page_quotes(page_soup))
 
@@ -128,28 +118,34 @@ class QuoteAuthorScraper:
 
         return all_authors, all_quotes
 
+    @staticmethod
+    def save_to_csv(
+        authors: [Author], quotes: [Quote], output_csv_path: str
+    ) -> None:
+        with open(
+            output_csv_path, "w", newline="", encoding="utf-8"
+        ) as quotes_file, open(
+            f"authors_of_{output_csv_path}", "w", newline="", encoding="utf-8"
+        ) as authors_file:
+            quotes_writer = csv.writer(quotes_file)
+            quotes_headers = ["text", "author", "tags"]
+            quotes_writer.writerow(quotes_headers)
+            for quote in quotes:
+                quotes_writer.writerow([quote.text, quote.author, quote.tags])
+
+            authors_writer = csv.writer(authors_file)
+            authors_headers = ["name", "born", "description"]
+            authors_writer.writerow(authors_headers)
+            for author in authors:
+                authors_writer.writerow(
+                    [author.name, author.born, author.description]
+                )
+
 
 def main(output_csv_path: str) -> None:
-    scraper = QuoteScraper(BASE_URL)
+    scraper = QuoteAuthorScraper(BASE_URL)
     authors, quotes = scraper.get_authors_and_quotes()
-    with open(
-        output_csv_path, "w", newline="", encoding="utf-8"
-    ) as quotes_file, open(
-        f"authors_of_{output_csv_path}", "w", newline="", encoding="utf-8"
-    ) as authors_file:
-        quotes_writer = csv.writer(quotes_file)
-        quotes_headers = ["text", "author", "tags"]
-        quotes_writer.writerow(quotes_headers)
-        for quote in quotes:
-            quotes_writer.writerow([quote.text, quote.author, quote.tags])
-
-        authors_writer = csv.writer(authors_file)
-        authors_headers = ["name", "born", "description"]
-        authors_writer.writerow(authors_headers)
-        for author in authors:
-            authors_writer.writerow(
-                [author.name, author.born, author.description]
-            )
+    scraper.save_to_csv(authors, quotes, output_csv_path)
 
 
 if __name__ == "__main__":
