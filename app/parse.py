@@ -31,96 +31,107 @@ class Author:
     description: str
 
 
-def parse_single_quote(quote_soup: Tag) -> Quote:
-    return Quote(
-        text=quote_soup.select_one(".text").text,
-        author=quote_soup.select_one(".author").text,
-        tags=[tag.get_text() for tag in quote_soup.select(".tag")],
-    )
+class QuoteAuthorScraper:
+    def __init__(self, base_url: str):
+        self.base_url = base_url
+        self.cached_author_hrefs: [str] = []
 
+    @staticmethod
+    def get_page_soup(url: str) -> BeautifulSoup:
+        response = requests.get(url)
+        response.raise_for_status()
+        return BeautifulSoup(response.content, features="html.parser")
 
-def prettify_description(text: str) -> str:
-    """Mainly to remove unexpected whitespace characters"""
-    return " ".join(text.split()).replace("''", '"')
+    @staticmethod
+    def parse_single_quote(quote_soup: Tag) -> Quote:
+        return Quote(
+            text=quote_soup.select_one(".text").text,
+            author=quote_soup.select_one(".author").text,
+            tags=[tag.get_text() for tag in quote_soup.select(".tag")],
+        )
 
+    @staticmethod
+    def prettify_description(text: str) -> str:
+        """Mainly to remove unexpected whitespace characters"""
+        return " ".join(text.split()).replace("''", '"')
 
-def parse_single_author(author_href: str) -> Author:
-    page = requests.get(BASE_URL + author_href).content
-    author_page_soup = BeautifulSoup(page, "html.parser")
+    def parse_single_author(self, author_href: str) -> Author:
+        # page = requests.get(BASE_URL + author_href).content
+        # author_page_soup = BeautifulSoup(page, "html.parser")
+        author_page_soup = self.get_page_soup(self.base_url + author_href)
 
-    author = Author(
-        name=author_page_soup.select_one(".author-title").text,
-        born=author_page_soup.select_one(".author-born-date").text
-        + " "
-        + author_page_soup.select_one(".author-born-location").text,
-        description=prettify_description(
-            author_page_soup.select_one(".author-description").text
-        ),
-    )
+        author = Author(
+            name=author_page_soup.select_one(".author-title").text,
+            born=author_page_soup.select_one(".author-born-date").text
+            + " "
+            + author_page_soup.select_one(".author-born-location").text,
+            description=self.prettify_description(
+                author_page_soup.select_one(".author-description").text
+            ),
+        )
 
-    logging.info(f"Adding author: {author}")
+        logging.info(f"Adding author: {author}")
 
-    return author
+        return author
 
+    def get_single_page_quotes(self, page_soup: BeautifulSoup) -> [Quote]:
+        quotes = page_soup.select(".quote")
 
-def get_single_page_quotes(page_soup: BeautifulSoup) -> [Quote]:
-    quotes = page_soup.select(".quote")
+        return [self.parse_single_quote(quote) for quote in quotes]
 
-    return [parse_single_quote(quote) for quote in quotes]
+    def get_single_page_authors(self, page_soup: BeautifulSoup) -> [Author]:
+        authors_soup = page_soup.select("a[href^='/author/']")
+        authors = []
 
+        for author in authors_soup:
+            author_href = author.get("href")
+            if author_href not in self.cached_author_hrefs:
+                authors.append(self.parse_single_author(author_href))
+                self.cached_author_hrefs.append(author_href)
+            else:
+                logging.info(
+                    f'Author already added ({author_href.split("/")[-1]})'
+                )
 
-def get_single_page_authors(
-    page_soup: BeautifulSoup, cached_author_hrefs: [str] = None
-) -> [Author]:
-    authors_soup = page_soup.select("a[href^='/author/']")
-    authors = []
+        return authors
 
-    for author in authors_soup:
-        author_href = author.get("href")
-        if author_href not in cached_author_hrefs:
-            authors.append(parse_single_author(author_href))
-            cached_author_hrefs.append(author_href)
-        else:
+    def get_authors_and_quotes(self) -> ([Author], [Quote]):
+        """Authors and quotes scraping done in a single cycle for minimizing
+        the number of requests"""
+        # page = requests.get(BASE_URL).content
+        # first_page_soup = BeautifulSoup(page, "html.parser")
+        first_page_soup = self.get_page_soup(self.base_url)
+
+        # cached_author_hrefs = []
+        all_authors = self.get_single_page_authors(first_page_soup)
+
+        all_quotes = self.get_single_page_quotes(first_page_soup)
+
+        next_page = first_page_soup.select_one(".next > a")
+
+        while next_page:
             logging.info(
-                f'Author already added ({author_href.split("/")[-1]})'
+                "Starting scraping page #"
+                f'{next_page.get("href").split("/")[2]}'
             )
 
-    return authors
+            # page = requests.get(BASE_URL + next_page.get("href")).content
+            # page_soup = BeautifulSoup(page, "html.parser")
+            page_soup = self.get_page_soup(
+                self.base_url + next_page.get("href")
+            )
 
+            all_authors.extend(self.get_single_page_authors(page_soup))
+            all_quotes.extend(self.get_single_page_quotes(page_soup))
 
-def get_authors_and_quotes() -> ([Author], [Quote]):
-    """Authors and quotes scraping done in a single cycle for minimizing the
-    number of requests"""
-    page = requests.get(BASE_URL).content
-    first_page_soup = BeautifulSoup(page, "html.parser")
+            next_page = page_soup.select_one(".next > a")
 
-    cached_author_hrefs = []
-    all_authors = get_single_page_authors(first_page_soup, cached_author_hrefs)
-
-    all_quotes = get_single_page_quotes(first_page_soup)
-
-    next_page = first_page_soup.select_one(".next > a")
-
-    while next_page:
-        logging.info(
-            f'Starting scraping page #{next_page.get("href").split("/")[2]}'
-        )
-
-        page = requests.get(BASE_URL + next_page.get("href")).content
-        page_soup = BeautifulSoup(page, "html.parser")
-
-        all_authors.extend(
-            get_single_page_authors(page_soup, cached_author_hrefs)
-        )
-        all_quotes.extend(get_single_page_quotes(page_soup))
-
-        next_page = page_soup.select_one(".next > a")
-
-    return all_authors, all_quotes
+        return all_authors, all_quotes
 
 
 def main(output_csv_path: str) -> None:
-    authors, quotes = get_authors_and_quotes()
+    scraper = QuoteScraper(BASE_URL)
+    authors, quotes = scraper.get_authors_and_quotes()
     with open(
         output_csv_path, "w", newline="", encoding="utf-8"
     ) as quotes_file, open(
