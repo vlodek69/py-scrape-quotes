@@ -1,12 +1,10 @@
+import csv
 import logging
 import sys
 from dataclasses import dataclass
 
-import csv
-
 import requests
 from bs4 import BeautifulSoup, Tag
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +30,7 @@ class Author:
 
 
 class QuoteAuthorScraper:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str) -> None:
         self.base_url = base_url
         self.cached_author_hrefs: [str] = []
 
